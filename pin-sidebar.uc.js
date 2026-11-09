@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name        Pin Sidebar
-// @description Find pin search, dock dot, lockable pin divider, folder colors and "Load All Tabs" for Zen
+// @description Find pin search, dock dot, folder colors and "Load All Tabs" for Zen
 // ==/UserScript==
 
 (() => {
@@ -9,32 +9,17 @@
   }
   window.__pinSidebarLoaded = true;
 
-  const PREF_FIXED = "pinsidebar.divider.fixed";
-  const PREF_HEIGHT = "pinsidebar.divider.height";
   const PREF_COLORS = "pinsidebar.folder.colors";
   const FOLDER_COLORS = [
     "#f6d2d8", "#fbe3cf", "#f7e7c6", "#dcebd5",
     "#d9eeeb", "#d6e6f2", "#e3dcf2", "#e8e0d5",
   ];
-  const MIN_PIN_HEIGHT = 44;
-  const MIN_REST_HEIGHT = 120;
-  const DIVIDER_HEIGHT = 22;
   const PINNED_SECTION = ".zen-workspace-pinned-tabs-section";
-  const SEPARATOR = ".pinned-tabs-container-separator";
 
   /** @type {Map<Element, boolean>} folder -> original collapsed state */
   const savedFolderState = new Map();
 
   // ---------------------------------------------------------------- Helpers
-
-  /** @returns {boolean} */
-  const isFixed = () => Services.prefs.getBoolPref(PREF_FIXED, false);
-
-  /** @returns {boolean} lock is only effective with a stored height */
-  const isLocked = () => isFixed() && getHeight() > 0;
-
-  /** @returns {number} */
-  const getHeight = () => Services.prefs.getIntPref(PREF_HEIGHT, 0);
 
   /**
    * Top-level pinned items (tabs and folders) of a pinned section.
@@ -133,10 +118,15 @@
     const bar = document.createElement("div");
     bar.id = "pinfind-bar";
 
+    const icon = document.createElement("img");
+    icon.id = "pinfind-icon";
+    icon.src = "chrome://browser/skin/zen-icons/search-glass.svg";
+    icon.alt = "";
+
     const input = document.createElement("input");
     input.id = "pinfind-input";
     input.type = "text";
-    input.placeholder = "Find pin";
+    input.placeholder = "Search...";
     input.spellcheck = false;
 
     const clear = document.createElement("button");
@@ -165,7 +155,7 @@
       input.focus();
     });
 
-    bar.append(input, clear);
+    bar.append(icon, input, clear);
     essentials.parentNode.insertBefore(bar, essentials);
 
     // Also filter new tabs/folders while a search is active
@@ -181,169 +171,7 @@
     return true;
   };
 
-  // ---------------------------------------------------------------- 3. Divider
-
-  /**
-   * Clamps a pinned area height so the unpinned area below keeps enough room.
-   * @param {Element} section
-   * @param {number} height
-   * @returns {number}
-   */
-  const clampHeight = (section, height) => {
-    const top = section.getBoundingClientRect().top;
-    const bottom = document.getElementById("zen-tabs-wrapper").getBoundingClientRect().bottom;
-    const max = Math.max(MIN_PIN_HEIGHT, bottom - top - DIVIDER_HEIGHT - MIN_REST_HEIGHT);
-    return Math.max(MIN_PIN_HEIGHT, Math.min(max, height));
-  };
-
-  /**
-   * Stores the current height of the pins (without Zen's separator) as locked height.
-   * @param {Element} section
-   */
-  const adoptHeight = section => {
-    const sectionHeight = section.getBoundingClientRect().height;
-    if (!(sectionHeight > 0)) {
-      // Not laid out (hidden workspace / startup): try again on the next layout pass
-      return;
-    }
-    const separator = section.querySelector(SEPARATOR);
-    const height = sectionHeight - (separator?.getBoundingClientRect().height ?? 0);
-    Services.prefs.setIntPref(PREF_HEIGHT, Math.round(clampHeight(section, height)));
-  };
-
-  /**
-   * Creates the button that toggles the lock. The icon is pin (lock) or unpin (unlock).
-   * @param {boolean} locked whether the button sits on the locked divider (action: unlock)
-   * @returns {Element}
-   */
-  const createPinButton = locked => {
-    const button = document.createXULElement("toolbarbutton");
-    button.className = "pinfind-divider-pin";
-    button.setAttribute("tooltiptext", locked ? "Unlock divider" : "Lock divider");
-    button.setAttribute(
-      "image",
-      "chrome://browser/skin/zen-icons/" + (locked ? "unpin.svg" : "pin.svg")
-    );
-    button.addEventListener("click", event => {
-      event.stopPropagation();
-      // Toggle based on the effective state, not the raw pref (it can be stale)
-      const next = !isLocked();
-      Services.prefs.setBoolPref(PREF_FIXED, next);
-      if (next) {
-        const section = button.closest(PINNED_SECTION) ?? button.closest(".pinfind-divider")?.previousElementSibling;
-        if (section) {
-          adoptHeight(section);
-        }
-      }
-      layoutAll();
-    });
-    return button;
-  };
-
-  /**
-   * Own divider that sits right below the (scrolling) pinned section, so it
-   * belongs to the always visible unpinned area. Zen's own separator stays in the
-   * pinned section (Zen relies on it there) and is hidden while locked.
-   * @param {Element} section
-   * @returns {Element}
-   */
-  const ensureDivider = section => {
-    const existing = section.nextElementSibling;
-    if (existing?.classList.contains("pinfind-divider")) {
-      return existing;
-    }
-    const divider = document.createElement("div");
-    divider.className = "pinfind-divider";
-    const line = document.createElement("div");
-    line.className = "pinfind-divider-line";
-    divider.append(createPinButton(true), line);
-    section.after(divider);
-
-    divider.addEventListener("pointerdown", event => {
-      if (event.button !== 0 || event.target.closest(".pinfind-divider-pin")) {
-        return;
-      }
-      divider.setPointerCapture(event.pointerId);
-      divider.classList.add("pinfind-dragging");
-
-      const onMove = moveEvent => {
-        const top = section.getBoundingClientRect().top;
-        setHeight(clampHeight(section, moveEvent.clientY - top - DIVIDER_HEIGHT / 2));
-      };
-      const onUp = () => {
-        divider.classList.remove("pinfind-dragging");
-        divider.releasePointerCapture(event.pointerId);
-        divider.removeEventListener("pointermove", onMove);
-        divider.removeEventListener("pointerup", onUp);
-        divider.removeEventListener("pointercancel", onUp);
-      };
-      divider.addEventListener("pointermove", onMove);
-      divider.addEventListener("pointerup", onUp);
-      divider.addEventListener("pointercancel", onUp);
-      event.preventDefault();
-      event.stopPropagation();
-    });
-    return divider;
-  };
-
-  /**
-   * Locks the pinned area to a fixed height: pins scroll inside it, the divider
-   * below stays put and the regular tabs below remain visible.
-   * @param {Element} section
-   */
-  const layoutSection = section => {
-    const separator = section.querySelector(SEPARATOR);
-    if (!separator) {
-      return;
-    }
-    const divider = ensureDivider(section);
-    // Locked without a stored height (e.g. stale pref from an older version): adopt the current one
-    if (isFixed() && getHeight() <= 0) {
-      adoptHeight(section);
-    }
-    const locked = isLocked();
-    divider.hidden = !locked;
-    separator.classList.toggle("pinfind-fixed", locked);
-    section.classList.toggle("pinfind-fixed-section", locked);
-    if (locked) {
-      section.style.setProperty("--pinfind-height", getHeight() + "px");
-    } else {
-      section.style.removeProperty("--pinfind-height");
-    }
-  };
-
-  const layoutAll = () => {
-    for (const section of pinnedSections()) {
-      layoutSection(section);
-    }
-  };
-
-  /** @param {number} height */
-  const setHeight = height => {
-    Services.prefs.setIntPref(PREF_HEIGHT, Math.round(height));
-    layoutAll();
-  };
-
-  /**
-   * Adds the pin button to Zen's separator (shown while the divider is not locked).
-   * @param {Element} separator
-   */
-  const enhanceSeparator = separator => {
-    if (separator.hasAttribute("pinfind-enhanced")) {
-      return;
-    }
-    separator.setAttribute("pinfind-enhanced", "true");
-    separator.prepend(createPinButton(false));
-  };
-
-  const enhanceAll = () => {
-    for (const separator of document.querySelectorAll(SEPARATOR)) {
-      enhanceSeparator(separator);
-    }
-    layoutAll();
-  };
-
-  // ---------------------------------------------------------------- 4. Load all tabs
+  // ---------------------------------------------------------------- 3. Load all tabs
 
   /**
    * All tabs of a folder including subfolders and split view groups.
@@ -389,7 +217,7 @@
     }
   };
 
-  // ---------------------------------------------------------------- 5. Folder color
+  // ---------------------------------------------------------------- 4. Folder color
 
   /** @returns {Record<string, string>} folder id -> #rrggbb */
   const readColors = () => {
@@ -510,7 +338,7 @@
     panel.openPopup(folder.labelElement ?? folder, "after_start");
   };
 
-  // ---------------------------------------------------------------- 6. Folder menu items
+  // ---------------------------------------------------------------- 5. Folder menu items
 
   const setupFolderMenuItems = () => {
     const menu = document.getElementById("zenFolderActions");
@@ -568,7 +396,7 @@
     });
   };
 
-  // ---------------------------------------------------------------- 7. Keep tabs above the space bar
+  // ---------------------------------------------------------------- 6. Keep tabs above the space bar
 
   /**
    * The tab area spans the full sidebar height, so tabs scroll under the space
@@ -601,7 +429,6 @@
     requestAnimationFrame(() => {
       scheduled = false;
       createSearchBar();
-      enhanceAll();
       applyColors();
     });
   };
@@ -614,15 +441,10 @@
       }
       return;
     }
-    enhanceAll();
     setupFolderMenuItems();
     keepTabsAboveFooter();
-    // Zen lays out the workspaces late: re-apply the lock a few times after startup
-    for (const delay of [300, 1000, 2500]) {
-      setTimeout(layoutAll, delay);
-    }
     applyColors();
-    // New workspaces / pins / folders -> re-layout the divider
+    // New workspaces / pins / folders -> re-create the search bar, re-apply folder colors
     new MutationObserver(scheduleEnhance).observe(wrapper, {
       childList: true,
       subtree: true,
