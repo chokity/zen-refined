@@ -1,0 +1,123 @@
+/* ===== 1. Find pin ===== */
+#pinfind-bar {
+  display: flex;
+  align-items: center;
+  margin: 2px 6px 6px;
+  padding: 0 8px;
+  height: 30px;
+  border-radius: 8px;
+  background: light-dark(rgba(0, 0, 0, 0.06), rgba(255, 255, 255, 0.08));
+  border: 1px solid transparent;
+  box-sizing: border-box;
+
+  &:focus-within {
+    border-color: color-mix(in srgb, currentColor 35%, transparent);
+  }
+
+  :root:not([zen-sidebar-expanded="true"]) & {
+    display: none;
+  }
+}
+
+#pinfind-input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  margin: 0;
+  padding: 0;
+}
+
+#pinfind-clear {
+  display: none;
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: inherit;
+  opacity: 0.6;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 0 0 4px;
+
+  &:hover {
+    opacity: 1;
+  }
+
+  #pinfind-bar[has-text] & {
+    display: block;
+  }
+}
+
+[pinfind-hidden] {
+  display: none !important;
+}
+
+/* ===== 2. Dock-Dot fuer geoeffnete Pins ===== */
+.tabbrowser-tab[pinned]:not([zen-essential]):not([pending]) {
+  position: relative;
+
+  &::before {
+    content: "";
+    position: absolute;
+    inset-inline-start: 1px;
+    top: 50%;
+    width: 4px;
+    height: 4px;
+    margin-top: -2px;
+    border-radius: 50%;
+    background: light-dark(rgba(0, 0, 0, 0.6), rgba(255, 255, 255, 0.75));
+    pointer-events: none;
+    z-index: 2;
+  }
+}
+
+/* ===== 3. Trenner: Pin-Symbol, fixiert, verschiebbar ===== */
+.pinfind-divider-pin {
+  appearance: none;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin: 0 2px 0 4px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  opacity: 0;
+  cursor: pointer;
+  font-size: 11px;
+  line-height: 18px;
+  text-align: center;
+  transition: opacity 0.15s;
+  pointer-events: auto;
+}
+
+#navigator-toolbox:hover .pinfind-divider-pin,
+.pinned-tabs-container-separator.pinfind-fixed .pinfind-divider-pin {
+  opacity: 0.6;
+}
+
+.pinfind-divider-pin:hover {
+  opacity: 1 !important;
+  background: light-dark(rgba(0, 0, 0, 0.08), rgba(255, 255, 255, 0.12));
+}
+
+.pinned-tabs-container-separator.pinfind-fixed {
+  cursor: ns-resize;
+  height: 22px !important;
+  opacity: 1 !important;
+  touch-action: none;
+
+  & toolbarseparator {
+    background: light-dark(rgba(0, 0, 0, 0.3), rgba(255, 255, 255, 0.3));
+  }
+}
+
+.pinned-tabs-container-separator.pinfind-dragging toolbarseparator {
+  height: 2px;
+}
