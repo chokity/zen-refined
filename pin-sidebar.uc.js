@@ -295,17 +295,29 @@
     return tabs;
   };
 
-  /** @param {Element} folder */
-  const loadAllTabs = folder => {
+  /**
+   * Loads all pending tabs of a folder. SessionStore only restores a pending tab
+   * when it gets selected, so each one is selected briefly and the original
+   * selection is restored afterwards.
+   * @param {Element} folder
+   */
+  const loadAllTabs = async folder => {
     folder.collapsed = false;
-    for (const tab of folderTabs(folder)) {
-      if (!tab.hasAttribute("pending")) {
-        continue;
+    const original = gBrowser.selectedTab;
+    try {
+      for (const tab of folderTabs(folder)) {
+        if (!tab.hasAttribute("pending")) {
+          continue;
+        }
+        gBrowser.selectedTab = tab;
+        // Let the tab switch settle so the restore actually starts
+        await new Promise(resolve => requestAnimationFrame(resolve));
       }
-      try {
-        SessionStore.restoreTabContent(tab);
-      } catch (e) {
-        console.error("Pin Sidebar: failed to load tab", e);
+    } catch (e) {
+      console.error("Pin Sidebar: failed to load tabs", e);
+    } finally {
+      if (original && !original.closing) {
+        gBrowser.selectedTab = original;
       }
     }
   };
