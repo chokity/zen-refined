@@ -22,14 +22,24 @@
 #pinfind-input {
   flex: 1;
   min-width: 0;
-  background: transparent;
-  border: none;
-  outline: none;
+  appearance: none;
+  background: transparent !important;
+  border: none !important;
+  border-radius: 0 !important;
+  outline: none !important;
+  box-shadow: none !important;
   color: inherit;
   font: inherit;
   font-size: 12px;
   margin: 0;
   padding: 0;
+
+  &:focus,
+  &:focus-visible {
+    outline: none !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
 }
 
 #pinfind-clear {
@@ -57,26 +67,26 @@
   display: none !important;
 }
 
-/* ===== 2. Dock-Dot fuer geoeffnete Pins ===== */
-.tabbrowser-tab[pinned]:not([zen-essential]):not([pending]) {
+/* ===== 2. Dock dot for open pins ===== */
+.tabbrowser-tab[pinned]:not([zen-essential]):not([pending]) > .tab-stack > .tab-content {
   position: relative;
 
   &::before {
     content: "";
     position: absolute;
-    inset-inline-start: 1px;
+    inset-inline-start: 2px;
     top: 50%;
-    width: 4px;
-    height: 4px;
-    margin-top: -2px;
+    width: 5px;
+    height: 5px;
+    margin-top: -2.5px;
     border-radius: 50%;
-    background: light-dark(rgba(0, 0, 0, 0.6), rgba(255, 255, 255, 0.75));
+    background: light-dark(rgba(0, 0, 0, 0.7), rgba(255, 255, 255, 0.85));
     pointer-events: none;
-    z-index: 2;
+    z-index: 10;
   }
 }
 
-/* ===== 3. Trenner: Pin-Symbol, fixiert, verschiebbar ===== */
+/* ===== 3. Divider: pin icon, locked, draggable ===== */
 .pinfind-divider-pin {
   appearance: none;
   flex: none;
@@ -118,6 +128,77 @@
   }
 }
 
+.zen-workspace-pinned-tabs-section.pinfind-fixed-section {
+  display: flex;
+  flex-direction: column;
+  flex: none;
+  height: var(--pinfind-height);
+  overflow-y: auto;
+  scrollbar-width: none;
+
+  & > * {
+    flex-shrink: 0;
+  }
+
+  & > .pinned-tabs-container-separator {
+    order: 9999;
+    margin-top: auto;
+    position: sticky;
+    bottom: 0;
+    z-index: 3;
+  }
+}
+
 .pinned-tabs-container-separator.pinfind-dragging toolbarseparator {
   height: 2px;
+}
+
+/* ===== 4. Folder color ===== */
+zen-folder[pinfind-color] {
+  border-radius: 12px;
+  background: light-dark(
+    color-mix(in srgb, var(--pinfind-color) 80%, transparent),
+    color-mix(in srgb, var(--pinfind-color) 22%, transparent)
+  );
+}
+
+#pinfind-color-panel {
+  --panel-padding: 10px;
+}
+
+.pinfind-color-box {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 190px;
+}
+
+.pinfind-color-title {
+  font-weight: 600;
+}
+
+.pinfind-color-swatches {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+
+.pinfind-color-swatch {
+  appearance: none;
+  height: 26px;
+  border: 1px solid light-dark(rgba(0, 0, 0, 0.15), rgba(255, 255, 255, 0.2));
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.pinfind-color-input {
+  width: 100%;
+  height: 28px;
+  padding: 0;
+}
+
+.pinfind-color-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
 }

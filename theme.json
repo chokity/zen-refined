@@ -1,7 +1,7 @@
 {
   "id": "7944d9d4-4959-4c09-a83c-654760f9a20c",
   "name": "Pin Sidebar",
-  "description": "Find-pin-Suche, Dock-Dot für geöffnete Pins und fixierbarer, verschiebbarer Pin-Trenner.",
+  "description": "Find pin search, dock dot for open pins and a lockable, draggable pin divider.",
   "homepage": "https://github.com/uwe-pliha/zen-pin-sidebar",
   "style": {
     "chrome": "userChrome.css"

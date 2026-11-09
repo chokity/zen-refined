@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name        Pin Sidebar
-// @description Find-pin-Suche, Dock-Dot und fixierbarer Pin-Trenner fuer Zen
+// @description Find pin search, dock dot, lockable pin divider, folder colors and "Load All Tabs" for Zen
 // ==/UserScript==
 
 (() => {
@@ -10,23 +10,30 @@
   window.__pinSidebarLoaded = true;
 
   const PREF_FIXED = "pinsidebar.divider.fixed";
-  const PREF_INDEX = "pinsidebar.divider.index";
+  const PREF_HEIGHT = "pinsidebar.divider.height";
+  const PREF_COLORS = "pinsidebar.folder.colors";
+  const FOLDER_COLORS = [
+    "#f6d2d8", "#fbe3cf", "#f7e7c6", "#dcebd5",
+    "#d9eeeb", "#d6e6f2", "#e3dcf2", "#e8e0d5",
+  ];
+  const MIN_PIN_HEIGHT = 44;
+  const MIN_REST_HEIGHT = 120;
   const PINNED_SECTION = ".zen-workspace-pinned-tabs-section";
   const SEPARATOR = ".pinned-tabs-container-separator";
 
-  /** @type {Map<Element, boolean>} Folder -> urspruenglicher collapsed-Zustand */
+  /** @type {Map<Element, boolean>} folder -> original collapsed state */
   const savedFolderState = new Map();
 
-  // ---------------------------------------------------------------- Helfer
+  // ---------------------------------------------------------------- Helpers
 
   /** @returns {boolean} */
   const isFixed = () => Services.prefs.getBoolPref(PREF_FIXED, false);
 
   /** @returns {number} */
-  const getIndex = () => Services.prefs.getIntPref(PREF_INDEX, 0);
+  const getHeight = () => Services.prefs.getIntPref(PREF_HEIGHT, 0);
 
   /**
-   * Oberste Pin-Elemente (Tabs und Folder) einer Pin-Sektion.
+   * Top-level pinned items (tabs and folders) of a pinned section.
    * @param {Element} section
    * @returns {Element[]}
    */
@@ -50,17 +57,17 @@
     try {
       text += " " + (tab.linkedBrowser?.currentURI?.spec ?? "");
     } catch (e) {
-      // pending Tabs ohne Browser: nur Label verwenden
+      // pending tabs without a browser: use the label only
     }
     return text.toLowerCase().includes(query);
   }
 
   /**
-   * Filtert ein Element rekursiv und setzt das pinfind-hidden-Attribut.
+   * Filters an element recursively and sets the pinfind-hidden attribute.
    * @param {Element} element
    * @param {string} query
-   * @param {boolean} forceShow Eltern-Folder hat selbst getroffen: alles darin zeigen
-   * @returns {boolean} true wenn das Element sichtbar bleibt
+   * @param {boolean} forceShow parent folder matched itself: show everything inside
+   * @returns {boolean} true if the element stays visible
    */
   const filterElement = (element, query, forceShow) => {
     let visible;
@@ -132,7 +139,7 @@
     clear.id = "pinfind-clear";
     clear.type = "button";
     clear.textContent = "✕";
-    clear.title = "Suche leeren";
+    clear.title = "Clear search";
 
     const update = () => {
       bar.toggleAttribute("has-text", input.value.length > 0);
@@ -157,7 +164,7 @@
     bar.append(input, clear);
     essentials.parentNode.insertBefore(bar, essentials);
 
-    // Neue Tabs/Folder waehrend aktiver Suche ebenfalls filtern
+    // Also filter new tabs/folders while a search is active
     new MutationObserver(() => {
       if (input.value.trim()) {
         applyFilter(input.value);
@@ -170,10 +177,11 @@
     return true;
   };
 
-  // ---------------------------------------------------------------- 3. Trenner
+  // ---------------------------------------------------------------- 3. Divider
 
   /**
-   * Setzt CSS-order so, dass der Trenner vor Element `index` steht.
+   * Locks the pinned area to a fixed height: pins scroll above the divider, the
+   * divider stays at the bottom and the regular tabs below remain visible.
    * @param {Element} section
    */
   const layoutSection = section => {
@@ -181,20 +189,14 @@
     if (!separator) {
       return;
     }
-    const items = topLevelItems(section);
-    if (!isFixed()) {
-      for (const item of items) {
-        item.style.removeProperty("order");
-      }
-      separator.style.removeProperty("order");
+    if (!isFixed() || getHeight() <= 0) {
+      section.style.removeProperty("--pinfind-height");
+      section.classList.remove("pinfind-fixed-section");
       separator.classList.remove("pinfind-fixed");
       return;
     }
-    const index = Math.max(0, Math.min(getIndex(), items.length));
-    items.forEach((item, i) => {
-      item.style.order = String(i * 2);
-    });
-    separator.style.order = String(index * 2 - 1);
+    section.style.setProperty("--pinfind-height", getHeight() + "px");
+    section.classList.add("pinfind-fixed-section");
     separator.classList.add("pinfind-fixed");
   };
 
@@ -204,14 +206,14 @@
     }
   };
 
-  /** @param {number} index */
-  const setIndex = index => {
-    Services.prefs.setIntPref(PREF_INDEX, index);
+  /** @param {number} height */
+  const setHeight = height => {
+    Services.prefs.setIntPref(PREF_HEIGHT, Math.round(height));
     layoutAll();
   };
 
   /**
-   * Haengt Pin-Button und Drag-Verhalten an einen Trenner.
+   * Attaches the pin button and drag behavior to a divider.
    * @param {Element} separator
    */
   const enhanceSeparator = separator => {
@@ -222,16 +224,16 @@
 
     const button = document.createXULElement("toolbarbutton");
     button.className = "pinfind-divider-pin";
-    button.setAttribute("tooltiptext", "Trenner fixieren");
+    button.setAttribute("tooltiptext", "Lock divider");
     button.textContent = "📌";
     button.addEventListener("click", event => {
       event.stopPropagation();
       const next = !isFixed();
       Services.prefs.setBoolPref(PREF_FIXED, next);
       if (next) {
-        // Aktuelle Position uebernehmen: Trenner bleibt zunaechst am Listenende
+        // Adopt the current height
         const section = separator.closest(PINNED_SECTION);
-        Services.prefs.setIntPref(PREF_INDEX, topLevelItems(section).length);
+        Services.prefs.setIntPref(PREF_HEIGHT, Math.round(section.getBoundingClientRect().height));
       }
       layoutAll();
     });
@@ -246,17 +248,11 @@
       separator.classList.add("pinfind-dragging");
 
       const onMove = (moveEvent) => {
-        const items = topLevelItems(section);
-        let newIndex = 0;
-        items.forEach((item, i) => {
-          const rect = item.getBoundingClientRect();
-          if (rect.height > 0 && rect.top + rect.height / 2 < moveEvent.clientY) {
-            newIndex = i + 1;
-          }
-        });
-        if (newIndex !== getIndex()) {
-          setIndex(newIndex);
-        }
+        const top = section.getBoundingClientRect().top;
+        const bottom = document.getElementById("zen-tabs-wrapper").getBoundingClientRect().bottom;
+        const max = Math.max(MIN_PIN_HEIGHT, bottom - top - MIN_REST_HEIGHT);
+        const height = moveEvent.clientY - top + separator.getBoundingClientRect().height / 2;
+        setHeight(Math.max(MIN_PIN_HEIGHT, Math.min(max, height)));
       };
       const onUp = () => {
         separator.classList.remove("pinfind-dragging");
@@ -280,6 +276,219 @@
     layoutAll();
   };
 
+  // ---------------------------------------------------------------- 4. Load all tabs
+
+  /**
+   * All tabs of a folder including subfolders and split view groups.
+   * @param {Element} folder
+   * @returns {Element[]}
+   */
+  const folderTabs = folder => {
+    const tabs = [];
+    for (const item of folder.allItemsRecursive) {
+      if (gBrowser.isTab(item)) {
+        tabs.push(item);
+      } else if (item.tabs && !item.isZenFolder) {
+        tabs.push(...item.tabs);
+      }
+    }
+    return tabs;
+  };
+
+  /** @param {Element} folder */
+  const loadAllTabs = folder => {
+    folder.collapsed = false;
+    for (const tab of folderTabs(folder)) {
+      if (!tab.hasAttribute("pending")) {
+        continue;
+      }
+      try {
+        SessionStore.restoreTabContent(tab);
+      } catch (e) {
+        console.error("Pin Sidebar: failed to load tab", e);
+      }
+    }
+  };
+
+  // ---------------------------------------------------------------- 5. Folder color
+
+  /** @returns {Record<string, string>} folder id -> #rrggbb */
+  const readColors = () => {
+    try {
+      return JSON.parse(Services.prefs.getStringPref(PREF_COLORS, "{}"));
+    } catch (e) {
+      return {};
+    }
+  };
+
+  /**
+   * Persists (or removes, for an empty color) the color of a folder.
+   * @param {string} id
+   * @param {string} color
+   */
+  const saveColor = (id, color) => {
+    const colors = readColors();
+    if (color) {
+      colors[id] = color;
+    } else {
+      delete colors[id];
+    }
+    Services.prefs.setStringPref(PREF_COLORS, JSON.stringify(colors));
+  };
+
+  /**
+   * Sets the color on the folder element only (no saving), also used for the live preview.
+   * @param {Element} folder
+   * @param {string} color
+   */
+  const paintFolder = (folder, color) => {
+    if (color) {
+      folder.setAttribute("pinfind-color", "");
+      folder.style.setProperty("--pinfind-color", color);
+    } else {
+      folder.removeAttribute("pinfind-color");
+      folder.style.removeProperty("--pinfind-color");
+    }
+  };
+
+  const applyColors = () => {
+    const colors = readColors();
+    for (const folder of document.querySelectorAll("zen-folder")) {
+      paintFolder(folder, colors[folder.id] ?? "");
+    }
+  };
+
+  /** @type {Element | null} */
+  let colorPanel = null;
+
+  /** @param {Element} folder */
+  const openColorDialog = folder => {
+    colorPanel?.remove();
+    const original = readColors()[folder.id] ?? "";
+
+    const panel = document.createXULElement("panel");
+    panel.id = "pinfind-color-panel";
+    panel.setAttribute("type", "arrow");
+    panel.setAttribute("noautofocus", "true");
+    colorPanel = panel;
+
+    const box = document.createElement("div");
+    box.className = "pinfind-color-box";
+    const title = document.createElement("div");
+    title.className = "pinfind-color-title";
+    title.textContent = "Folder Color";
+    const swatches = document.createElement("div");
+    swatches.className = "pinfind-color-swatches";
+
+    /** @param {string} color */
+    const confirm = color => {
+      saveColor(folder.id, color);
+      paintFolder(folder, color);
+      panel.hidePopup();
+    };
+
+    for (const color of FOLDER_COLORS) {
+      const swatch = document.createElement("button");
+      swatch.className = "pinfind-color-swatch";
+      swatch.style.background = color;
+      swatch.title = color;
+      swatch.addEventListener("click", () => confirm(color));
+      swatches.append(swatch);
+    }
+
+    const custom = document.createElement("input");
+    custom.type = "color";
+    custom.className = "pinfind-color-input";
+    custom.value = original || FOLDER_COLORS[0];
+    custom.addEventListener("input", () => paintFolder(folder, custom.value));
+    custom.addEventListener("change", () => confirm(custom.value));
+
+    const actions = document.createElement("div");
+    actions.className = "pinfind-color-actions";
+    if (original) {
+      const none = document.createElement("button");
+      none.textContent = "No Color";
+      none.addEventListener("click", () => confirm(""));
+      actions.append(none);
+    }
+    const cancel = document.createElement("button");
+    cancel.textContent = "Cancel";
+    cancel.addEventListener("click", () => panel.hidePopup());
+    actions.append(cancel);
+
+    box.append(title, swatches, custom, actions);
+    panel.append(box);
+    // Closing without confirming (Cancel, Escape, click outside) resets the preview
+    panel.addEventListener("popuphidden", () => {
+      applyColors();
+      panel.remove();
+      if (colorPanel === panel) {
+        colorPanel = null;
+      }
+    });
+
+    document.getElementById("mainPopupSet").append(panel);
+    panel.openPopup(folder.labelElement ?? folder, "after_start");
+  };
+
+  // ---------------------------------------------------------------- 6. Folder menu items
+
+  const setupFolderMenuItems = () => {
+    const menu = document.getElementById("zenFolderActions");
+    const unloadItem = document.getElementById("context_zenFolderUnloadAll");
+    const iconItem = document.getElementById("context_zenFolderChangeIcon");
+    if (!menu || !unloadItem || document.getElementById("context_pinfindFolderLoadAll")) {
+      return;
+    }
+    /** @type {Element | null} */
+    let currentFolder = null;
+
+    /**
+     * @param {string} id
+     * @param {string} label
+     * @param {(folder: Element) => void} action
+     * @returns {Element}
+     */
+    const createItem = (id, label, action) => {
+      const item = document.createXULElement("menuitem");
+      item.id = id;
+      item.setAttribute("label", label);
+      item.addEventListener("command", () => {
+        if (currentFolder) {
+          action(currentFolder);
+        }
+      });
+      return item;
+    };
+
+    const loadItem = createItem("context_pinfindFolderLoadAll", "Load All Tabs", loadAllTabs);
+    const colorItem = createItem("context_pinfindFolderColor", "Set Color\u2026", openColorDialog);
+    unloadItem.before(loadItem);
+    (iconItem ?? unloadItem).after(colorItem);
+
+    // Resolve the folder the same way Zen does when opening the menu
+    menu.addEventListener("popupshowing", event => {
+      const target =
+        event.target === menu
+          ? (menu.triggerNode ?? event.explicitOriginalTarget)
+          : event.explicitOriginalTarget;
+      let folder = null;
+      if (gBrowser.isTabGroupLabel(target)) {
+        folder = target.group;
+      } else if (target?.parentElement && gBrowser.isTabGroupLabel(target.parentElement)) {
+        folder = target.parentElement.group;
+      } else if (
+        target?.parentElement?.isZenFolder &&
+        target.classList.contains("tab-group-label-container")
+      ) {
+        folder = target.parentElement;
+      }
+      currentFolder = folder?.isZenFolder ? folder : null;
+      loadItem.hidden = !currentFolder;
+      colorItem.hidden = !currentFolder;
+    });
+  };
+
   // ---------------------------------------------------------------- Start
 
   let scheduled = false;
@@ -292,6 +501,7 @@
       scheduled = false;
       createSearchBar();
       enhanceAll();
+      applyColors();
     });
   };
 
@@ -304,7 +514,9 @@
       return;
     }
     enhanceAll();
-    // Neue Workspaces / Pins / Folder -> Trenner neu ausrichten
+    setupFolderMenuItems();
+    applyColors();
+    // New workspaces / pins / folders -> re-layout the divider
     new MutationObserver(scheduleEnhance).observe(wrapper, {
       childList: true,
       subtree: true,
