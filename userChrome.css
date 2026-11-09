@@ -74,7 +74,7 @@
   &::before {
     content: "";
     position: absolute;
-    inset-inline-start: 2px;
+    inset-inline-start: 9px;
     top: 50%;
     width: 5px;
     height: 5px;
@@ -84,6 +84,30 @@
     pointer-events: none;
     z-index: 10;
   }
+}
+
+/* Essentials: dot centered below the tile */
+.tabbrowser-tab[zen-essential]:not([pending]) > .tab-stack > .tab-content {
+  position: relative;
+
+  &::after {
+    content: "";
+    position: absolute;
+    inset-inline-start: 50%;
+    bottom: 8px;
+    width: 5px;
+    height: 5px;
+    translate: -50% 0;
+    border-radius: 50%;
+    background: light-dark(rgba(0, 0, 0, 0.7), rgba(255, 255, 255, 0.85));
+    pointer-events: none;
+    z-index: 10;
+  }
+}
+
+/* Hide the X on unloaded pins; pins are removed via the context menu */
+#tabbrowser-tabs .tabbrowser-tab[pinned][pending] .tab-close-button {
+  display: none !important;
 }
 
 /* ===== 3. Divider: pin icon, locked, draggable ===== */
@@ -108,8 +132,22 @@
 }
 
 #navigator-toolbox:hover .pinfind-divider-pin,
-.pinned-tabs-container-separator.pinfind-fixed .pinfind-divider-pin {
+.pinfind-divider .pinfind-divider-pin {
   opacity: 0.6;
+}
+
+.pinfind-divider-pin::before {
+  content: "";
+  display: block;
+  width: 100%;
+  height: 100%;
+  background-color: currentColor;
+  mask: url("chrome://browser/skin/zen-icons/pin.svg") center / 12px no-repeat;
+}
+
+/* Locked divider: the action is "unpin" */
+.pinfind-divider .pinfind-divider-pin::before {
+  mask-image: url("chrome://browser/skin/zen-icons/unpin.svg");
 }
 
 .pinfind-divider-pin:hover {
@@ -117,15 +155,13 @@
   background: light-dark(rgba(0, 0, 0, 0.08), rgba(255, 255, 255, 0.12));
 }
 
+/* Zen's own separator stays in the pinned section (Zen needs it there) but is hidden while locked */
 .pinned-tabs-container-separator.pinfind-fixed {
-  cursor: ns-resize;
-  height: 22px !important;
-  opacity: 1 !important;
-  touch-action: none;
-
-  & toolbarseparator {
-    background: light-dark(rgba(0, 0, 0, 0.3), rgba(255, 255, 255, 0.3));
-  }
+  height: 0 !important;
+  min-height: 0;
+  padding: 0;
+  opacity: 0 !important;
+  pointer-events: none;
 }
 
 .zen-workspace-pinned-tabs-section.pinfind-fixed-section {
@@ -134,23 +170,41 @@
   flex: none;
   height: var(--pinfind-height);
   overflow-y: auto;
-  scrollbar-width: none;
+  scrollbar-width: auto;
+  scrollbar-color: color-mix(in srgb, currentColor 35%, transparent 65%) transparent;
 
   & > * {
     flex-shrink: 0;
   }
+}
 
-  & > .pinned-tabs-container-separator {
-    order: 9999;
-    margin-top: auto;
-    position: sticky;
-    bottom: 0;
-    z-index: 3;
+/* Own divider below the scrolling pinned section, part of the unpinned area */
+.pinfind-divider {
+  display: flex;
+  flex: none;
+  align-items: center;
+  width: 100%;
+  height: 22px;
+  padding: 0 var(--zen-toolbox-padding, 0);
+  box-sizing: border-box;
+  cursor: ns-resize;
+  touch-action: none;
+
+  &[hidden],
+  .zen-workspace-pinned-tabs-section[hide-separator] + & {
+    display: none;
   }
 }
 
-.pinned-tabs-container-separator.pinfind-dragging toolbarseparator {
-  height: 2px;
+.pinfind-divider-line {
+  flex: 1;
+  height: 1px;
+  margin-inline: 4px 0;
+  background: light-dark(rgba(0, 0, 0, 0.3), rgba(255, 255, 255, 0.3));
+
+  .pinfind-divider.pinfind-dragging & {
+    height: 2px;
+  }
 }
 
 /* ===== 4. Folder color ===== */
@@ -201,4 +255,10 @@ zen-folder[pinfind-color] {
   display: flex;
   justify-content: flex-end;
   gap: 6px;
+}
+
+/* ===== 5. Tabs end above the space bar ===== */
+#zen-tabs-wrapper {
+  height: calc(100% - var(--pinfind-footer-height, 0px));
+  min-height: 0;
 }

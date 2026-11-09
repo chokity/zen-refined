@@ -180,8 +180,85 @@
   // ---------------------------------------------------------------- 3. Divider
 
   /**
-   * Locks the pinned area to a fixed height: pins scroll above the divider, the
-   * divider stays at the bottom and the regular tabs below remain visible.
+   * Creates the button that toggles the lock. The icon (pin / unpin) is set via CSS.
+   * @param {boolean} locked whether the button sits on the locked divider (action: unlock)
+   * @returns {Element}
+   */
+  const createPinButton = locked => {
+    const button = document.createXULElement("toolbarbutton");
+    button.className = "pinfind-divider-pin";
+    button.setAttribute("tooltiptext", locked ? "Unlock divider" : "Lock divider");
+    button.addEventListener("click", event => {
+      event.stopPropagation();
+      const next = !isFixed();
+      Services.prefs.setBoolPref(PREF_FIXED, next);
+      if (next) {
+        // Adopt the current height of the pins (without the Zen separator)
+        const section = event.target.closest(PINNED_SECTION) ?? event.target.closest(".pinfind-divider")?.previousElementSibling;
+        const separator = section?.querySelector(SEPARATOR);
+        if (section) {
+          const height = section.getBoundingClientRect().height - (separator?.getBoundingClientRect().height ?? 0);
+          Services.prefs.setIntPref(PREF_HEIGHT, Math.round(height));
+        }
+      }
+      layoutAll();
+    });
+    return button;
+  };
+
+  /**
+   * Own divider that sits right below the (scrolling) pinned section, so it
+   * belongs to the always visible unpinned area. Zen's own separator stays in the
+   * pinned section (Zen relies on it there) and is hidden while locked.
+   * @param {Element} section
+   * @returns {Element}
+   */
+  const ensureDivider = section => {
+    const existing = section.nextElementSibling;
+    if (existing?.classList.contains("pinfind-divider")) {
+      return existing;
+    }
+    const divider = document.createElement("div");
+    divider.className = "pinfind-divider";
+    const line = document.createElement("div");
+    line.className = "pinfind-divider-line";
+    divider.append(createPinButton(true), line);
+    section.after(divider);
+
+    divider.addEventListener("pointerdown", event => {
+      if (event.button !== 0 || event.target.closest(".pinfind-divider-pin")) {
+        return;
+      }
+      divider.setPointerCapture(event.pointerId);
+      divider.classList.add("pinfind-dragging");
+
+      const onMove = moveEvent => {
+        const top = section.getBoundingClientRect().top;
+        const bottom = document.getElementById("zen-tabs-wrapper").getBoundingClientRect().bottom;
+        const dividerHeight = divider.getBoundingClientRect().height;
+        const max = Math.max(MIN_PIN_HEIGHT, bottom - top - dividerHeight - MIN_REST_HEIGHT);
+        const height = moveEvent.clientY - top - dividerHeight / 2;
+        setHeight(Math.max(MIN_PIN_HEIGHT, Math.min(max, height)));
+      };
+      const onUp = () => {
+        divider.classList.remove("pinfind-dragging");
+        divider.releasePointerCapture(event.pointerId);
+        divider.removeEventListener("pointermove", onMove);
+        divider.removeEventListener("pointerup", onUp);
+        divider.removeEventListener("pointercancel", onUp);
+      };
+      divider.addEventListener("pointermove", onMove);
+      divider.addEventListener("pointerup", onUp);
+      divider.addEventListener("pointercancel", onUp);
+      event.preventDefault();
+      event.stopPropagation();
+    });
+    return divider;
+  };
+
+  /**
+   * Locks the pinned area to a fixed height: pins scroll inside it, the divider
+   * below stays put and the regular tabs below remain visible.
    * @param {Element} section
    */
   const layoutSection = section => {
@@ -189,15 +266,16 @@
     if (!separator) {
       return;
     }
-    if (!isFixed() || getHeight() <= 0) {
+    const divider = ensureDivider(section);
+    const locked = isFixed() && getHeight() > 0;
+    divider.hidden = !locked;
+    separator.classList.toggle("pinfind-fixed", locked);
+    section.classList.toggle("pinfind-fixed-section", locked);
+    if (locked) {
+      section.style.setProperty("--pinfind-height", getHeight() + "px");
+    } else {
       section.style.removeProperty("--pinfind-height");
-      section.classList.remove("pinfind-fixed-section");
-      separator.classList.remove("pinfind-fixed");
-      return;
     }
-    section.style.setProperty("--pinfind-height", getHeight() + "px");
-    section.classList.add("pinfind-fixed-section");
-    separator.classList.add("pinfind-fixed");
   };
 
   const layoutAll = () => {
@@ -213,7 +291,7 @@
   };
 
   /**
-   * Attaches the pin button and drag behavior to a divider.
+   * Adds the pin button to Zen's separator (shown while the divider is not locked).
    * @param {Element} separator
    */
   const enhanceSeparator = separator => {
@@ -221,52 +299,7 @@
       return;
     }
     separator.setAttribute("pinfind-enhanced", "true");
-
-    const button = document.createXULElement("toolbarbutton");
-    button.className = "pinfind-divider-pin";
-    button.setAttribute("tooltiptext", "Lock divider");
-    button.textContent = "📌";
-    button.addEventListener("click", event => {
-      event.stopPropagation();
-      const next = !isFixed();
-      Services.prefs.setBoolPref(PREF_FIXED, next);
-      if (next) {
-        // Adopt the current height
-        const section = separator.closest(PINNED_SECTION);
-        Services.prefs.setIntPref(PREF_HEIGHT, Math.round(section.getBoundingClientRect().height));
-      }
-      layoutAll();
-    });
-    separator.prepend(button);
-
-    separator.addEventListener("pointerdown", event => {
-      if (!isFixed() || event.button !== 0 || event.target.closest(".pinfind-divider-pin, toolbarbutton")) {
-        return;
-      }
-      const section = separator.closest(PINNED_SECTION);
-      separator.setPointerCapture(event.pointerId);
-      separator.classList.add("pinfind-dragging");
-
-      const onMove = (moveEvent) => {
-        const top = section.getBoundingClientRect().top;
-        const bottom = document.getElementById("zen-tabs-wrapper").getBoundingClientRect().bottom;
-        const max = Math.max(MIN_PIN_HEIGHT, bottom - top - MIN_REST_HEIGHT);
-        const height = moveEvent.clientY - top + separator.getBoundingClientRect().height / 2;
-        setHeight(Math.max(MIN_PIN_HEIGHT, Math.min(max, height)));
-      };
-      const onUp = () => {
-        separator.classList.remove("pinfind-dragging");
-        separator.releasePointerCapture(event.pointerId);
-        separator.removeEventListener("pointermove", onMove);
-        separator.removeEventListener("pointerup", onUp);
-        separator.removeEventListener("pointercancel", onUp);
-      };
-      separator.addEventListener("pointermove", onMove);
-      separator.addEventListener("pointerup", onUp);
-      separator.addEventListener("pointercancel", onUp);
-      event.preventDefault();
-      event.stopPropagation();
-    });
+    separator.prepend(createPinButton(false));
   };
 
   const enhanceAll = () => {
@@ -295,17 +328,29 @@
     return tabs;
   };
 
-  /** @param {Element} folder */
-  const loadAllTabs = folder => {
+  /**
+   * Loads all pending tabs of a folder. SessionStore only restores a pending tab
+   * when it gets selected, so each one is selected briefly and the original
+   * selection is restored afterwards.
+   * @param {Element} folder
+   */
+  const loadAllTabs = async folder => {
     folder.collapsed = false;
-    for (const tab of folderTabs(folder)) {
-      if (!tab.hasAttribute("pending")) {
-        continue;
+    const original = gBrowser.selectedTab;
+    try {
+      for (const tab of folderTabs(folder)) {
+        if (!tab.hasAttribute("pending")) {
+          continue;
+        }
+        gBrowser.selectedTab = tab;
+        // Let the tab switch settle so the restore actually starts
+        await new Promise(resolve => requestAnimationFrame(resolve));
       }
-      try {
-        SessionStore.restoreTabContent(tab);
-      } catch (e) {
-        console.error("Pin Sidebar: failed to load tab", e);
+    } catch (e) {
+      console.error("Pin Sidebar: failed to load tabs", e);
+    } finally {
+      if (original && !original.closing) {
+        gBrowser.selectedTab = original;
       }
     }
   };
@@ -489,6 +534,28 @@
     });
   };
 
+  // ---------------------------------------------------------------- 7. Keep tabs above the space bar
+
+  /**
+   * The tab area spans the full sidebar height, so tabs scroll under the space
+   * bar (#zen-sidebar-foot-buttons). Expose its height so the CSS can end the
+   * tab area above it.
+   */
+  const keepTabsAboveFooter = () => {
+    const footer = document.getElementById("zen-sidebar-foot-buttons");
+    if (!footer) {
+      return;
+    }
+    const update = () => {
+      document.documentElement.style.setProperty(
+        "--pinfind-footer-height",
+        Math.ceil(footer.getBoundingClientRect().height) + "px"
+      );
+    };
+    update();
+    new ResizeObserver(update).observe(footer);
+  };
+
   // ---------------------------------------------------------------- Start
 
   let scheduled = false;
@@ -515,6 +582,7 @@
     }
     enhanceAll();
     setupFolderMenuItems();
+    keepTabsAboveFooter();
     applyColors();
     // New workspaces / pins / folders -> re-layout the divider
     new MutationObserver(scheduleEnhance).observe(wrapper, {
