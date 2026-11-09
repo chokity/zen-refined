@@ -68,13 +68,14 @@
 }
 
 /* ===== 2. Dock dot for open pins ===== */
-.tabbrowser-tab[pinned]:not([zen-essential]):not([pending]) > .tab-stack > .tab-content {
+/* Anchored to the favicon, so the gap stays the same at any indentation (folders) */
+.tabbrowser-tab[pinned]:not([zen-essential]):not([pending]) > .tab-stack > .tab-content .tab-icon-stack {
   position: relative;
 
   &::before {
     content: "";
     position: absolute;
-    inset-inline-start: 9px;
+    inset-inline-end: calc(100% + 4px);
     top: 50%;
     width: 5px;
     height: 5px;
@@ -111,6 +112,11 @@
 }
 
 /* ===== 3. Divider: pin icon, locked, draggable ===== */
+/* Zen disables pointer events on toolbarbuttons inside its separator */
+.pinned-tabs-container-separator .pinfind-divider-pin {
+  pointer-events: auto !important;
+}
+
 .pinfind-divider-pin {
   appearance: none;
   flex: none;
@@ -136,18 +142,22 @@
   opacity: 0.6;
 }
 
-.pinfind-divider-pin::before {
-  content: "";
-  display: block;
-  width: 100%;
-  height: 100%;
-  background-color: currentColor;
-  mask: url("chrome://browser/skin/zen-icons/pin.svg") center / 12px no-repeat;
-}
+.pinfind-divider-pin {
+  display: flex;
+  align-items: center;
+  justify-content: center;
 
-/* Locked divider: the action is "unpin" */
-.pinfind-divider .pinfind-divider-pin::before {
-  mask-image: url("chrome://browser/skin/zen-icons/unpin.svg");
+  & .toolbarbutton-icon {
+    width: 12px;
+    height: 12px;
+    margin: 0;
+    -moz-context-properties: fill, fill-opacity;
+    fill: currentColor;
+  }
+
+  & .toolbarbutton-text {
+    display: none;
+  }
 }
 
 .pinfind-divider-pin:hover {

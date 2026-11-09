@@ -30,6 +30,9 @@
   /** @returns {boolean} */
   const isFixed = () => Services.prefs.getBoolPref(PREF_FIXED, false);
 
+  /** @returns {boolean} lock is only effective with a stored height */
+  const isLocked = () => isFixed() && getHeight() > 0;
+
   /** @returns {number} */
   const getHeight = () => Services.prefs.getIntPref(PREF_HEIGHT, 0);
 
@@ -194,7 +197,22 @@
   };
 
   /**
-   * Creates the button that toggles the lock. The icon (pin / unpin) is set via CSS.
+   * Stores the current height of the pins (without Zen's separator) as locked height.
+   * @param {Element} section
+   */
+  const adoptHeight = section => {
+    const sectionHeight = section.getBoundingClientRect().height;
+    if (!(sectionHeight > 0)) {
+      // Not laid out (hidden workspace / startup): try again on the next layout pass
+      return;
+    }
+    const separator = section.querySelector(SEPARATOR);
+    const height = sectionHeight - (separator?.getBoundingClientRect().height ?? 0);
+    Services.prefs.setIntPref(PREF_HEIGHT, Math.round(clampHeight(section, height)));
+  };
+
+  /**
+   * Creates the button that toggles the lock. The icon is pin (lock) or unpin (unlock).
    * @param {boolean} locked whether the button sits on the locked divider (action: unlock)
    * @returns {Element}
    */
@@ -202,17 +220,19 @@
     const button = document.createXULElement("toolbarbutton");
     button.className = "pinfind-divider-pin";
     button.setAttribute("tooltiptext", locked ? "Unlock divider" : "Lock divider");
+    button.setAttribute(
+      "image",
+      "chrome://browser/skin/zen-icons/" + (locked ? "unpin.svg" : "pin.svg")
+    );
     button.addEventListener("click", event => {
       event.stopPropagation();
-      const next = !isFixed();
+      // Toggle based on the effective state, not the raw pref (it can be stale)
+      const next = !isLocked();
       Services.prefs.setBoolPref(PREF_FIXED, next);
       if (next) {
-        // Adopt the current height of the pins (without the Zen separator)
         const section = button.closest(PINNED_SECTION) ?? button.closest(".pinfind-divider")?.previousElementSibling;
-        const separator = section?.querySelector(SEPARATOR);
         if (section) {
-          const height = section.getBoundingClientRect().height - (separator?.getBoundingClientRect().height ?? 0);
-          Services.prefs.setIntPref(PREF_HEIGHT, Math.round(clampHeight(section, height)));
+          adoptHeight(section);
         }
       }
       layoutAll();
@@ -277,7 +297,11 @@
       return;
     }
     const divider = ensureDivider(section);
-    const locked = isFixed() && getHeight() > 0;
+    // Locked without a stored height (e.g. stale pref from an older version): adopt the current one
+    if (isFixed() && getHeight() <= 0) {
+      adoptHeight(section);
+    }
+    const locked = isLocked();
     divider.hidden = !locked;
     separator.classList.toggle("pinfind-fixed", locked);
     section.classList.toggle("pinfind-fixed-section", locked);
@@ -593,6 +617,10 @@
     enhanceAll();
     setupFolderMenuItems();
     keepTabsAboveFooter();
+    // Zen lays out the workspaces late: re-apply the lock a few times after startup
+    for (const delay of [300, 1000, 2500]) {
+      setTimeout(layoutAll, delay);
+    }
     applyColors();
     // New workspaces / pins / folders -> re-layout the divider
     new MutationObserver(scheduleEnhance).observe(wrapper, {
