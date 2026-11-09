@@ -18,6 +18,7 @@
   ];
   const MIN_PIN_HEIGHT = 44;
   const MIN_REST_HEIGHT = 120;
+  const DIVIDER_HEIGHT = 22;
   const PINNED_SECTION = ".zen-workspace-pinned-tabs-section";
   const SEPARATOR = ".pinned-tabs-container-separator";
 
@@ -180,6 +181,19 @@
   // ---------------------------------------------------------------- 3. Divider
 
   /**
+   * Clamps a pinned area height so the unpinned area below keeps enough room.
+   * @param {Element} section
+   * @param {number} height
+   * @returns {number}
+   */
+  const clampHeight = (section, height) => {
+    const top = section.getBoundingClientRect().top;
+    const bottom = document.getElementById("zen-tabs-wrapper").getBoundingClientRect().bottom;
+    const max = Math.max(MIN_PIN_HEIGHT, bottom - top - DIVIDER_HEIGHT - MIN_REST_HEIGHT);
+    return Math.max(MIN_PIN_HEIGHT, Math.min(max, height));
+  };
+
+  /**
    * Creates the button that toggles the lock. The icon (pin / unpin) is set via CSS.
    * @param {boolean} locked whether the button sits on the locked divider (action: unlock)
    * @returns {Element}
@@ -194,11 +208,11 @@
       Services.prefs.setBoolPref(PREF_FIXED, next);
       if (next) {
         // Adopt the current height of the pins (without the Zen separator)
-        const section = event.target.closest(PINNED_SECTION) ?? event.target.closest(".pinfind-divider")?.previousElementSibling;
+        const section = button.closest(PINNED_SECTION) ?? button.closest(".pinfind-divider")?.previousElementSibling;
         const separator = section?.querySelector(SEPARATOR);
         if (section) {
           const height = section.getBoundingClientRect().height - (separator?.getBoundingClientRect().height ?? 0);
-          Services.prefs.setIntPref(PREF_HEIGHT, Math.round(height));
+          Services.prefs.setIntPref(PREF_HEIGHT, Math.round(clampHeight(section, height)));
         }
       }
       layoutAll();
@@ -234,11 +248,7 @@
 
       const onMove = moveEvent => {
         const top = section.getBoundingClientRect().top;
-        const bottom = document.getElementById("zen-tabs-wrapper").getBoundingClientRect().bottom;
-        const dividerHeight = divider.getBoundingClientRect().height;
-        const max = Math.max(MIN_PIN_HEIGHT, bottom - top - dividerHeight - MIN_REST_HEIGHT);
-        const height = moveEvent.clientY - top - dividerHeight / 2;
-        setHeight(Math.max(MIN_PIN_HEIGHT, Math.min(max, height)));
+        setHeight(clampHeight(section, moveEvent.clientY - top - DIVIDER_HEIGHT / 2));
       };
       const onUp = () => {
         divider.classList.remove("pinfind-dragging");

@@ -169,6 +169,8 @@
   flex-direction: column;
   flex: none;
   height: var(--pinfind-height);
+  /* Safety net (window resize): keep room for the divider and the unpinned tabs */
+  max-height: calc(100% - 142px);
   overflow-y: auto;
   scrollbar-width: auto;
   scrollbar-color: color-mix(in srgb, currentColor 35%, transparent 65%) transparent;
