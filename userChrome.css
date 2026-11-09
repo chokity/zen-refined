@@ -79,14 +79,14 @@
 }
 
 /* ===== 2. Dock dot for open pins ===== */
-/* Anchored to the favicon, so the gap stays the same at any indentation (folders) */
+/* Anchored to the favicon stack, so the position follows the indentation (folders) */
 .tabbrowser-tab[pinned]:not([zen-essential]):not([pending]) > .tab-stack > .tab-content .tab-icon-stack {
   position: relative;
 
   &::before {
     content: "";
     position: absolute;
-    inset-inline-end: calc(100% + 4px);
+    inset-inline-start: 0;
     top: 50%;
     width: 5px;
     height: 5px;
@@ -174,6 +174,8 @@ zen-folder[pinfind-color] {
 
 /* ===== 4. Tabs end above the space bar ===== */
 #zen-tabs-wrapper {
-  height: calc(100% - var(--pinfind-footer-height, 0px));
-  min-height: 0;
+  flex: 1 1 0 !important;
+  height: auto !important;
+  min-height: 0 !important;
+  margin-bottom: var(--pinfind-footer-overlap, 0px) !important;
 }

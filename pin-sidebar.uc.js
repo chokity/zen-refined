@@ -399,23 +399,31 @@
   // ---------------------------------------------------------------- 6. Keep tabs above the space bar
 
   /**
-   * The tab area spans the full sidebar height, so tabs scroll under the space
-   * bar (#zen-sidebar-foot-buttons). Expose its height so the CSS can end the
-   * tab area above it.
+   * Zen's tab area can extend underneath the space bar (#zen-sidebar-foot-buttons).
+   * Measure how far it reaches into it and expose that as --pinfind-footer-overlap,
+   * which the CSS uses as bottom margin of the tab area.
    */
   const keepTabsAboveFooter = () => {
     const footer = document.getElementById("zen-sidebar-foot-buttons");
-    if (!footer) {
+    const wrapper = document.getElementById("zen-tabs-wrapper");
+    if (!footer || !wrapper) {
       return;
     }
+    let overlap = 0;
     const update = () => {
-      document.documentElement.style.setProperty(
-        "--pinfind-footer-height",
-        Math.ceil(footer.getBoundingClientRect().height) + "px"
-      );
+      // Bottom edge the wrapper would have without our margin
+      const bottom = wrapper.getBoundingClientRect().bottom + overlap;
+      const next = Math.max(0, Math.ceil(bottom - footer.getBoundingClientRect().top));
+      if (next !== overlap) {
+        overlap = next;
+        document.documentElement.style.setProperty("--pinfind-footer-overlap", next + "px");
+      }
     };
     update();
-    new ResizeObserver(update).observe(footer);
+    const observer = new ResizeObserver(update);
+    observer.observe(footer);
+    observer.observe(wrapper);
+    observer.observe(document.documentElement);
   };
 
   // ---------------------------------------------------------------- Start

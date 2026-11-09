@@ -1,14 +1,14 @@
 {
   "id": "7944d9d4-4959-4c09-a83c-654760f9a20c",
-  "name": "Pin Sidebar",
+  "name": "Zen refined",
   "description": "Find pin search, dock dot for open pins, folder colors and load-all-tabs.",
-  "homepage": "https://github.com/uwe-pliha/zen-pin-sidebar",
+  "homepage": "https://github.com/chokity/zen-refined",
   "style": {
     "chrome": "userChrome.css"
   },
   "readme": "readme.md",
-  "version": "0.1.0",
-  "author": "pliha",
+  "version": "0.2.0",
+  "author": "chokity",
   "tags": ["sidebar", "pins"],
   "scripts": {
     "pin-sidebar.uc.js": {
